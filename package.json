@@ -1,0 +1,49 @@
+{
+  "name": "cdiff",
+  "version": "1.0.0",
+  "description": "A lightweight utility for creating, applying, and inverting compact, single-coordinate diff patches with block operation support.",
+  "main": "dist/cdiff.js",
+  "type": "module",
+  "types": "dist/cdiff.d.ts",
+  "author": "Aleks Fishan a.fishan@gmail.com",
+  "license": "MIT",
+  "directories": {
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fishan/cdiff.git"
+  },
+  "homepage": "https://github.com/fishan/cdiff#readme",
+  "bugs": {
+    "url": "https://github.com/fishan/cdiff/issues"
+  },
+  "scripts": {
+    "test": "mocha",
+    "build:ts": "tsc",
+    "build:minify": "terser dist/cdiff.js --output dist/cdiff.min.js --compress --mangle",
+    "build": "npm run build:ts && npm run build:minify",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "diff",
+    "patch",
+    "cdiff",
+    "delta",
+    "typescript",
+    "unidirectional-patch"
+  ],
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "mocha": "^11.7.2",
+    "terser": "^5.44.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "diff": "^8.0.2"
+  }
+}
