@@ -2,7 +2,7 @@
 
 A lightweight utility for creating, applying, and inverting compact, single-coordinate diff patches. Designed for scenarios where patch readability and simplicity are crucial, with support for block operations to minimize patch size.
 
-[![NPM Version](https://img.shields.io/npm/v/cdiff.svg)](https://www.npmjs.com/package/cdiff)
+[![NPM Version](https://img.shields.io/npm/v/@fishan/cdiff.svg)](https://www.npmjs.com/package/@fishan/cdiff)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## What is this?
@@ -20,7 +20,7 @@ This library solves the problem of generating and applying text patches. Unlike 
 ## Installation
 
 ```bash
-npm install cdiff
+npm install @fishan/cdiff
 ```
 
 ## API and Usage

@@ -1,5 +1,5 @@
 {
-  "name": "cdiff",
+  "name": "@fishan/cdiff",
   "version": "1.0.0",
   "description": "A lightweight utility for creating, applying, and inverting compact, single-coordinate diff patches with block operation support.",
   "main": "dist/cdiff.js",
