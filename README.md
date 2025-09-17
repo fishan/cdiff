@@ -210,7 +210,7 @@ The library is extensively tested to ensure reliability and robustness across va
 
 ## Acknowledgements
 
-This project internally uses the [**`diff`**](https://github.com/kpdecker/jsdiff) library (jsdiff) for the core line-by-line comparison logic. [cite_start]The algorithm is based on the paper ["An O(ND) Difference Algorithm and its Variations" (Myers, 1986)](http://www.xmailserver.org/diff2.pdf)[cite: 2].
+This project internally uses the [**`diff`**](https://github.com/kpdecker/jsdiff) library (jsdiff) for the core line-by-line comparison logic. The algorithm is based on the paper ["An O(ND) Difference Algorithm and its Variations" (Myers, 1986)](http://www.xmailserver.org/diff2.pdf).
 
 ## License
 
