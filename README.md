@@ -1,4 +1,4 @@
-# cdiff
+# cdiff - compact diff
 
 A lightweight utility for creating, applying, and inverting compact, single-coordinate diff patches. Designed for scenarios where patch readability and simplicity are crucial, with support for block operations to minimize patch size.
 
