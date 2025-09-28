@@ -3,20 +3,22 @@ import { CdiffCharService } from './cdiff_chars.js';
 
 /**
  * A utility for creating and applying compact, self-contained, single-coordinate diff patches.
- * It supports:
+ * It supports a rich command set for maximum patch compactness:
  * - Single-line commands (`A`, `D`)
- * - Block commands (`A+`, `D+`)
- * - Character-level commands (`a`, `d`) for intra-line changes
- * 
- * The `createPatch` method automatically chooses the most compact representation
- * (character-level, line-level, or block-level) for each change.
- * @version 1.1.0
+ * - Block commands (`A+`, `D+`) for consecutive line changes.
+ * - Character-level commands (`a`, `d`) for precise intra-line changes.
+ * - Grouped character-level commands (`a*`, `d*`) that apply a common operation
+ * to multiple, potentially non-contiguous lines.
+ *
+ * The `createPatch` method automatically analyzes changes and chooses the most
+ * efficient command combination to produce the smallest possible patch.
+ * @version 1.2.0
  */
 export class CdiffService {
 
     /**
      * Applies a cdiff patch to an original content string to produce the new content.
-     * Supports all command types: `A`, `D`, `A+`, `D+`, `a`, `d`.
+     * Supports all command types: `A`, `D`, `A+`, `D+`, `a`, `d`, and grouped `a*`, `d*`.
      * 
      * Character-level commands (`a`, `d`) are applied directly to the corresponding line
      * before any line deletions or additions are processed.
@@ -39,6 +41,12 @@ export class CdiffService {
      * const cdiff = ['1 d 6 1 x', '1 a 6 1 y'];
      * const patched = CdiffService.applyPatch(original, cdiff);
      * // patched is now 'const y = 10;'
+     * 
+     * @example <caption>Grouped character-level modification</caption>
+     * const original = 'line a\nline b\nline c';
+     * const cdiff = ['1-3 a* 0 4 "  "']; // Add indentation to lines 1 through 3
+     * const patched = CdiffService.applyPatch(original, cdiff);
+     * // patched is now '  line a\n  line b\n  line c'
      *
      * @example <caption>Block addition</caption>
      * const original = 'start\nend';
@@ -63,6 +71,23 @@ export class CdiffService {
         const blockRegex = /^(\d+)\s+([AD]\+)\s+(\d+)$/;
         const singleLineRegex = /^(\d+)\s+([AD])\s(.*)$/s;
         const charLineRegex = /^(\d+)\s+([ad])\s(.*)$/s;
+        const groupCharLineRegex = /^([\d,-]+)\s+([ad]\*)\s+(.*)$/s;
+
+        const parseLineRange = (rangeStr: string): number[] => {
+            const numbers = new Set<number>();
+            const parts = rangeStr.split(',');
+            for (const part of parts) {
+                if (part.includes('-')) {
+                    const [start, end] = part.split('-').map(Number);
+                    for (let i = start; i <= end; i++) {
+                        numbers.add(i);
+                    }
+                } else {
+                    numbers.add(Number(part));
+                }
+            }
+            return Array.from(numbers);
+        };
 
         for (let i = 0; i < cdiff.length; i++) {
             const command = cdiff[i];
@@ -70,6 +95,7 @@ export class CdiffService {
             const blockMatch = command.match(blockRegex);
             const singleLineMatch = !blockMatch ? command.match(singleLineRegex) : null;
             const charLineMatch = !blockMatch && !singleLineMatch ? command.match(charLineRegex) : null;
+            const groupCharLineMatch = !blockMatch && !singleLineMatch && !charLineMatch ? command.match(groupCharLineRegex) : null;
 
             if (blockMatch) {
                 const [, coordStr, type, countStr] = blockMatch;
@@ -149,6 +175,21 @@ export class CdiffService {
                     charMods.set(lineNum, []);
                 }
                 charMods.get(lineNum)!.push(command);
+            } else if (groupCharLineMatch) {
+                const [, rangeStr, type, rest] = groupCharLineMatch;
+                const commandType = type.charAt(0); // 'a' or 'd'
+                const lineNumbers = parseLineRange(rangeStr);
+
+                if (debug) console.log(`[DEBUG] Group char match found: type=${type}, lines=${lineNumbers.join(',')}`);
+
+                for (const lineNum of lineNumbers) {
+                    if (!charMods.has(lineNum)) {
+                        charMods.set(lineNum, []);
+                    }
+                    // "Unpack" the group command into individual commands for the charMods map
+                    charMods.get(lineNum)!.push(`${lineNum} ${commandType} ${rest}`);
+                }
+
             } else {
                  if (debug) console.log(`[DEBUG] Command did not match any pattern. Ignoring.`);
             }
@@ -248,8 +289,10 @@ export class CdiffService {
      * The patch may contain:
      * - Line commands (`A`, `D`)
      * - Block commands (`A+`, `D+`)
-     * - Character-level commands (`a`, `d`) for efficient intra-line changes
-     * 
+     * - Character-level commands (`a`, `d`)
+     * - Grouped character-level commands (`a*`, `d*`) for pattern-based compression.
+     * * The method automatically chooses the most compact representation for each change.
+     *
      * Character-level patches are used when they produce a smaller patch than line-level replacements,
      * especially for aligned multi-line blocks (N lines → N lines).
      *
@@ -269,6 +312,12 @@ export class CdiffService {
      * const newContent = 'const y = 10;';
      * const patch = CdiffService.createPatch(oldContent, newContent);
      * // patch is ['1 d 6 1 x', '1 a 6 1 y']
+     * 
+     * @example <caption>Grouped character-level patch for indentation change</caption>
+     * const oldContent = '{\n"key": "value"\n}';
+     * const newContent = '{\n  "key": "value"\n}';
+     * const patch = CdiffService.createPatch(oldContent, newContent);
+     * // patch is ['2 a* 0 2 "  "']
      *
      * @example <caption>Multi-line block addition</caption>
      * const oldContent = 'start\nend';
@@ -311,32 +360,99 @@ export class CdiffService {
                 const removedLines = part.value.endsWith('\n') ? part.value.slice(0, -1).split('\n') : part.value.split('\n');
                 const addedLines = nextPart.value.endsWith('\n') ? nextPart.value.slice(0, -1).split('\n') : nextPart.value.split('\n');
 
+                // --- NEW LOGIC FOR GROUPING AND PATTERN MATCHING ---
                 if (removedLines.length === addedLines.length && removedLines.length > 0) {
                     const blockStartLine = oldLineNum + 1;
-                    const charPatchForBlock: string[] = [];
+                    const individualCharPatches = new Map<number, string[]>();
+                    let totalCharPatchLength = 0;
 
+                    // Step 1: Generate all individual char patches first
                     for (let idx = 0; idx < removedLines.length; idx++) {
+                        const lineNum = blockStartLine + idx;
                         const oldLine = removedLines[idx];
                         const newLine = addedLines[idx];
-                        const lineCharPatch = CdiffCharService.createPatch(oldLine, newLine, blockStartLine + idx, debug);
-                        charPatchForBlock.push(...lineCharPatch);
+                        const lineCharPatch = CdiffCharService.createPatch(oldLine, newLine, lineNum, debug);
+                        if (lineCharPatch.length > 0) {
+                            individualCharPatches.set(lineNum, lineCharPatch);
+                            totalCharPatchLength += lineCharPatch.join('\n').length;
+                        }
                     }
 
-                    if (charPatchForBlock.length > 0) {
-                        const blockPatch: string[] = [
-                            `${blockStartLine} D+ ${removedLines.length}`,
-                            ...removedLines,
-                            `${blockStartLine} A+ ${addedLines.length}`,
-                            ...addedLines
-                        ];
+                    const blockPatch: string[] = [
+                        `${blockStartLine} D+ ${removedLines.length}`, ...removedLines,
+                        `${blockStartLine} A+ ${addedLines.length}`, ...addedLines
+                    ];
 
-                        if (charPatchForBlock.join('\n').length < blockPatch.join('\n').length) {
-                            cdiff.push(...charPatchForBlock);
-                            oldLineNum += removedLines.length;
-                            newLineNum += addedLines.length;
-                            i++;
-                            continue;
+                    // Only proceed if char patches are smaller than a full block replacement
+                    if (totalCharPatchLength > 0 && totalCharPatchLength < blockPatch.join('\n').length) {
+                        const opFrequency = new Map<string, number[]>(); // op -> [line1, line2, ...]
+                        const residualOps = new Map<number, string[]>(); // line -> [op1, op2, ...]
+
+                        // Step 2: Deconstruct commands and find common patterns
+                        for (const [lineNum, commands] of individualCharPatches.entries()) {
+                            const deconstructedOps = commands.flatMap(deconstructCharCommand);
+                            for (const op of deconstructedOps) {
+                                if (!opFrequency.has(op)) opFrequency.set(op, []);
+                                opFrequency.get(op)!.push(lineNum);
+                            }
                         }
+
+                        const finalPatch: string[] = [];
+
+                        // Step 3: Generate grouped commands for frequent patterns
+                        for (const [op, lines] of opFrequency.entries()) {
+                            if (lines.length > 1) {
+                                const lineRange = compressLineNumbers(lines);
+                                const [type, ...rest] = op.split(' ');
+                                finalPatch.push(`${lineRange} ${type}* ${rest.join(' ')}`);
+                                // Mark this op as "handled" for these lines
+                                for (const lineNum of lines) {
+                                    if (!residualOps.has(lineNum)) residualOps.set(lineNum, []);
+                                    // Add a placeholder to signify it's been handled by a group
+                                    const currentOps = individualCharPatches.get(lineNum)!.flatMap(deconstructCharCommand);
+                                    residualOps.set(lineNum, 
+                                    currentOps.filter(individualOp => individualOp !== op)
+                                    );
+                                }
+                            }
+                        }
+                        
+                        // Step 4: Collect residual (unique) ops
+                        const singleLineCommands = new Map<number, string>();
+                        for (const [lineNum, commands] of individualCharPatches.entries()) {
+                            const lineResiduals = residualOps.get(lineNum);
+                            
+                            // If lineResiduals is undefined, it means none of its ops were grouped
+                            // If it's defined, it means some might have been grouped
+                            const opsToProcess = lineResiduals === undefined 
+                                ? commands.flatMap(deconstructCharCommand) 
+                                : lineResiduals;
+
+                            if(opsToProcess.length > 0) {
+                                const a_ops = opsToProcess.filter(op => op.startsWith('a ')).map(op => op.substring(2)).join(' ');
+                                const d_ops = opsToProcess.filter(op => op.startsWith('d ')).map(op => op.substring(2)).join(' ');
+                                
+                                let finalLineCommand = '';
+                                if(d_ops) finalLineCommand += `${lineNum} d ${d_ops}`;
+                                if(a_ops) finalLineCommand += (finalLineCommand ? '\n' : '') + `${lineNum} a ${a_ops}`;
+
+                                if(finalLineCommand) {
+                                    singleLineCommands.set(lineNum, finalLineCommand);
+                                }
+                            }
+                        }
+
+                        // Push grouped commands first, then unique line commands sorted by line number
+                        cdiff.push(...finalPatch);
+                        const sortedSingleLines = Array.from(singleLineCommands.entries()).sort((a,b) => a[0] - b[0]);
+                        for(const [,command] of sortedSingleLines) {
+                            cdiff.push(...command.split('\n'));
+                        }
+
+                        oldLineNum += removedLines.length;
+                        newLineNum += addedLines.length;
+                        i++; // Skip nextPart
+                        continue;
                     }
                 }
                 if (part.count === 1 && nextPart.count === 1) {
@@ -438,6 +554,7 @@ export class CdiffService {
      * - 'A' ↔ 'D'
      * - 'A+' ↔ 'D+'
      * - 'a' ↔ 'd'
+     * - 'a*' ↔ 'd*'
      *
      * @param cdiff The cdiff patch array to invert.
      * @param debug If true, logs detailed internal processing steps to the console.
@@ -452,6 +569,11 @@ export class CdiffService {
      * const forwardPatch = ['1 d 6 1 x', '1 a 6 1 y'];
      * const invertedPatch = CdiffService.invertPatch(forwardPatch);
      * // invertedPatch is ['1 a 6 1 x', '1 d 6 1 y']
+     * 
+     * @example <caption>Grouped command inversion</caption>
+     * const forwardPatch = ['5-10 a* 0 2 "  "'];
+     * const invertedPatch = CdiffService.invertPatch(forwardPatch);
+     * // invertedPatch is ['5-10 d* 0 2 "  "']
      *
      * @example <caption>Block inversion</caption>
      * const forwardPatch = ['2 D+ 2', 'line A', 'line B', '4 A+ 1', 'line C'];
@@ -498,4 +620,75 @@ export class CdiffService {
         if (debug) console.log('[DEBUG] invertPatch finished.');
         return invertedCdiff;
     }
+    
+}
+
+/**
+ * Compresses a sorted array of line numbers into a compact string format.
+ * This is used to create efficient line ranges for grouped commands (`a*`/`d*`).
+ * Consecutive numbers are collapsed into a "start-end" range.
+ *
+ * @param numbers A sorted array of unique numbers.
+ * @returns A string representation of the numbers.
+ * @version 1.2.0
+ *
+ * @example
+ * const numbers = [2, 3, 4, 6, 8, 9, 10];
+ * const compressed = compressLineNumbers(numbers);
+ * // compressed is "2-4,6,8-10"
+ */
+function compressLineNumbers(numbers: number[]): string {
+    if (numbers.length === 0) return '';
+    numbers.sort((a, b) => a - b);
+    const ranges: (string | number)[] = [];
+    let start = numbers[0];
+    let end = numbers[0];
+    for (let i = 1; i < numbers.length; i++) {
+        if (numbers[i] === end + 1) {
+            end = numbers[i];
+        } else {
+            ranges.push(start === end ? start : `${start}-${end}`);
+            start = end = numbers[i];
+        }
+    }
+    ranges.push(start === end ? start : `${start}-${end}`);
+    return ranges.join(',');
+}
+
+
+/**
+ * Deconstructs a complex character-level command string into its atomic operations.
+ * This is a crucial step for finding repetitive patterns across different lines.
+ * The parser is designed to be robust and correctly handle content with multiple spaces.
+ *
+ * @param command A full character-level command for a single line.
+ * @returns An array of strings, where each string is a single atomic operation.
+ * @version 1.2.1
+ * * @example
+ * const command = '5 a 0 2 "  " 8 5 " more"';
+ * const deconstructed = deconstructCharCommand(command);
+ * // deconstructed is ['a 0 2 "  "', 'a 8 5 " more"']
+ */
+function deconstructCharCommand(command: string): string[] {
+    const parts = command.split(' ');
+    const type = parts[1];
+    const ops: string[] = [];
+
+    let remainder = command.substring(command.indexOf(type) + 2);
+
+    while (remainder.length > 0) {
+        const match = remainder.match(/^(\d+)\s(\d+)\s/);
+        if (!match) break;
+
+        const index = match[1];
+        const length = parseInt(match[2], 10);
+        const headerLength = match[0].length;
+
+        const content = remainder.substring(headerLength, headerLength + length);
+
+        ops.push(`${type} ${index} ${length} ${content}`);
+
+        remainder = remainder.substring(headerLength + length).trimStart();
+    }
+    return ops;
 }

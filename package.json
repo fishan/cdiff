@@ -1,6 +1,6 @@
 {
   "name": "@fishan/cdiff",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "A lightweight utility for creating, applying, and inverting compact, single-coordinate diff patches with block operation support.",
   "main": "dist/cdiff.js",
   "type": "module",
@@ -21,9 +21,10 @@
   "scripts": {
     "test": "mocha",
     "build:ts": "tsc",
-    "build:minify": "terser dist/cdiff.js --output dist/cdiff.min.js --compress --mangle",
+    "build:minify": "terser dist/cdiff.js --output dist/cdiff.min.js --compress --mangle && terser dist/cdiff_chars.js --output dist/cdiff_chars.min.js --compress --mangle",
     "build": "npm run build:ts && npm run build:minify",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "benchmark": "npm run build && node benchmarks/fetch-data.js && node --loader ts-node/esm --no-warnings benchmarks/index.ts"
   },
   "files": [
     "dist"
@@ -32,7 +33,7 @@
     "diff",
     "patch",
     "cdiff",
-    "delta",    
+    "delta",
     "text-diff",
     "diff-patch",
     "typescript",
@@ -40,7 +41,9 @@
     "unidirectional-patch"
   ],
   "devDependencies": {
+    "@types/diff-match-patch": "^1.0.36",
     "@types/mocha": "^10.0.10",
+    "diff-match-patch": "^1.0.5",
     "mocha": "^11.7.2",
     "terser": "^5.44.0",
     "ts-node": "^10.9.2",
