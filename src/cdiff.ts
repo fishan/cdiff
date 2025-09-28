@@ -1,13 +1,25 @@
 import { diffLines, type Change } from 'diff';
+import { CdiffCharService } from './cdiff_chars.js';
 
 /**
- * A utility for creating and applying compact, self-contained, single-coordinate deltas.
- * It supports both single-line (A, D) and block (A+, D+) commands.
+ * A utility for creating and applying compact, self-contained, single-coordinate diff patches.
+ * It supports:
+ * - Single-line commands (`A`, `D`)
+ * - Block commands (`A+`, `D+`)
+ * - Character-level commands (`a`, `d`) for intra-line changes
+ * 
+ * The `createPatch` method automatically chooses the most compact representation
+ * (character-level, line-level, or block-level) for each change.
+ * @version 1.1.0
  */
 export class CdiffService {
 
     /**
      * Applies a cdiff patch to an original content string to produce the new content.
+     * Supports all command types: `A`, `D`, `A+`, `D+`, `a`, `d`.
+     * 
+     * Character-level commands (`a`, `d`) are applied directly to the corresponding line
+     * before any line deletions or additions are processed.
      *
      * @param originalContent The source content to which the patch will be applied.
      * @param cdiff An array of strings representing the cdiff patch commands.
@@ -16,11 +28,23 @@ export class CdiffService {
      * @param debug If true, logs detailed internal processing steps to the console.
      * @returns The content after applying the patch.
      *
-     * @example
+     * @example <caption>Basic line addition</caption>
      * const original = 'line 1\nline 3';
      * const cdiff = ['2 A line 2'];
      * const patched = CdiffService.applyPatch(original, cdiff);
      * // patched is now 'line 1\nline 2\nline 3'
+     *
+     * @example <caption>Character-level modification</caption>
+     * const original = 'const x = 10;';
+     * const cdiff = ['1 d 6 1 x', '1 a 6 1 y'];
+     * const patched = CdiffService.applyPatch(original, cdiff);
+     * // patched is now 'const y = 10;'
+     *
+     * @example <caption>Block addition</caption>
+     * const original = 'start\nend';
+     * const cdiff = ['2 A+ 2', 'line A', 'line B'];
+     * const patched = CdiffService.applyPatch(original, cdiff);
+     * // patched is now 'start\nline A\nline B\nend'
      */
     public static applyPatch(
         originalContent: string,
@@ -29,20 +53,23 @@ export class CdiffService {
         onWarning?: (message: string) => void,
         debug: boolean = false
     ): string {
-        if (debug) console.log('[DEBUG] Starting applyPatch...');
+        if (debug) console.log('[CdiffService.applyPatch] Starting...');
         originalContent = originalContent.replace(/\r\n|\r/g, '\n');
         const sourceLines = originalContent === '' ? [] : originalContent.split('\n');
         const deletions = new Set<number>();
         const additions = new Map<number, string[]>();
+        const charMods = new Map<number, string[]>();
 
         const blockRegex = /^(\d+)\s+([AD]\+)\s+(\d+)$/;
         const singleLineRegex = /^(\d+)\s+([AD])\s(.*)$/s;
+        const charLineRegex = /^(\d+)\s+([ad])\s(.*)$/s;
 
         for (let i = 0; i < cdiff.length; i++) {
             const command = cdiff[i];
             if (debug) console.log(`[DEBUG] Processing command #${i}: ${command}`);
             const blockMatch = command.match(blockRegex);
             const singleLineMatch = !blockMatch ? command.match(singleLineRegex) : null;
+            const charLineMatch = !blockMatch && !singleLineMatch ? command.match(charLineRegex) : null;
 
             if (blockMatch) {
                 const [, coordStr, type, countStr] = blockMatch;
@@ -115,9 +142,32 @@ export class CdiffService {
                     additions.get(lineNum)!.push(content);
                     if (debug) console.log(`[DEBUG] Queued addition at line ${lineNum}: "${content}"`);
                 }
+            } else if (charLineMatch) {
+                const lineNum = parseInt(charLineMatch[1], 10);
+                if (debug) console.log(`[DEBUG] Queued char patch for line ${lineNum}`);
+                if (!charMods.has(lineNum)) {
+                    charMods.set(lineNum, []);
+                }
+                charMods.get(lineNum)!.push(command);
             } else {
                  if (debug) console.log(`[DEBUG] Command did not match any pattern. Ignoring.`);
             }
+        }
+
+        for (const [lineNum, charPatch] of charMods.entries()) {
+            const lineIndex = lineNum - 1;
+            if (lineIndex < 0 || lineIndex >= sourceLines.length) {
+                const message = `Invalid line number ${lineNum} for character patch. Ignoring.`;
+                if (strictMode) throw new Error(message);
+                if (onWarning) onWarning(message); else console.warn(message);
+                continue;
+            }
+            sourceLines[lineIndex] = CdiffCharService.applyPatch(
+                sourceLines[lineIndex],
+                charPatch,
+                onWarning,
+                debug
+            );
         }
 
         if (debug) console.log('[DEBUG] Assembling result...');
@@ -159,7 +209,7 @@ export class CdiffService {
 
     /**
      * Applies an inverted patch to the new content to restore the original content.
-     * This is an alias for `applyPatch`.
+     * This is an alias for `applyPatch` and supports all command types.
      *
      * @param newContent The content that was the result of a forward patch.
      * @param invertedCdiff An inverted cdiff patch array.
@@ -167,6 +217,20 @@ export class CdiffService {
      * @param onWarning A callback for warning messages in non-strict mode.
      * @param debug If true, logs detailed internal processing steps to the console.
      * @returns The restored original content.
+     *
+     * @example
+     * const oldContent = "A\nB\nC";
+     * const newContent = "A\nX\nC";
+     * 
+     * // Forward
+     * const patch = CdiffService.createPatch(oldContent, newContent);
+     * const result = CdiffService.applyPatch(oldContent, patch);
+     * // result === newContent
+     * 
+     * // Backward
+     * const invertedPatch = CdiffService.invertPatch(patch);
+     * const restored = CdiffService.applyInvertedPatch(newContent, invertedPatch);
+     * // restored === oldContent
      */
     public static applyInvertedPatch(
         newContent: string,
@@ -181,18 +245,42 @@ export class CdiffService {
 
     /**
      * Compares two text contents and generates a single-coordinate cdiff patch.
-     * Supports block operations and is optimized for newline changes.
+     * The patch may contain:
+     * - Line commands (`A`, `D`)
+     * - Block commands (`A+`, `D+`)
+     * - Character-level commands (`a`, `d`) for efficient intra-line changes
+     * 
+     * Character-level patches are used when they produce a smaller patch than line-level replacements,
+     * especially for aligned multi-line blocks (N lines → N lines).
      *
      * @param oldContent The original content string.
      * @param newContent The new content string.
      * @param debug If true, logs internal processing steps to the console.
      * @returns An array of strings representing the cdiff patch.
      *
-     * @example
+     * @example <caption>Basic line replacement</caption>
      * const oldContent = 'line 1\nold line\nline 3';
      * const newContent = 'line 1\nnew line\nline 3';
      * const patch = CdiffService.createPatch(oldContent, newContent);
      * // patch is ['2 D old line', '2 A new line']
+     *
+     * @example <caption>Character-level change</caption>
+     * const oldContent = 'const x = 10;';
+     * const newContent = 'const y = 10;';
+     * const patch = CdiffService.createPatch(oldContent, newContent);
+     * // patch is ['1 d 6 1 x', '1 a 6 1 y']
+     *
+     * @example <caption>Multi-line block addition</caption>
+     * const oldContent = 'start\nend';
+     * const newContent = 'start\nline A\nline B\nline C\nend';
+     * const patch = CdiffService.createPatch(oldContent, newContent);
+     * // patch is ['2 A+ 3', 'line A', 'line B', 'line C']
+     *
+     * @example <caption>Aligned multi-line replacement (character-level per line)</caption>
+     * const oldContent = 'const a = 1;\nconst b = 2;';
+     * const newContent = 'const a = 100;\nconst b = 200;';
+     * const patch = CdiffService.createPatch(oldContent, newContent);
+     * // patch may be ['1 a 11 2 00', '2 a 15 2 00']
      */
     public static createPatch(
         oldContent: string,
@@ -220,6 +308,59 @@ export class CdiffService {
             }
 
             if (nextPart && part.removed && nextPart.added) {
+                const removedLines = part.value.endsWith('\n') ? part.value.slice(0, -1).split('\n') : part.value.split('\n');
+                const addedLines = nextPart.value.endsWith('\n') ? nextPart.value.slice(0, -1).split('\n') : nextPart.value.split('\n');
+
+                if (removedLines.length === addedLines.length && removedLines.length > 0) {
+                    const blockStartLine = oldLineNum + 1;
+                    const charPatchForBlock: string[] = [];
+
+                    for (let idx = 0; idx < removedLines.length; idx++) {
+                        const oldLine = removedLines[idx];
+                        const newLine = addedLines[idx];
+                        const lineCharPatch = CdiffCharService.createPatch(oldLine, newLine, blockStartLine + idx, debug);
+                        charPatchForBlock.push(...lineCharPatch);
+                    }
+
+                    if (charPatchForBlock.length > 0) {
+                        const blockPatch: string[] = [
+                            `${blockStartLine} D+ ${removedLines.length}`,
+                            ...removedLines,
+                            `${blockStartLine} A+ ${addedLines.length}`,
+                            ...addedLines
+                        ];
+
+                        if (charPatchForBlock.join('\n').length < blockPatch.join('\n').length) {
+                            cdiff.push(...charPatchForBlock);
+                            oldLineNum += removedLines.length;
+                            newLineNum += addedLines.length;
+                            i++;
+                            continue;
+                        }
+                    }
+                }
+                if (part.count === 1 && nextPart.count === 1) {
+                    const oldLine = part.value.replace(/\n$/, '');
+                    const newLine = nextPart.value.replace(/\n$/, '');
+                    
+                    if (debug) console.log(`[DEBUG] Analyzing single modified line #${oldLineNum + 1} for intra-line diff...`);
+
+                    const charPatch = CdiffCharService.createPatch(oldLine, newLine, oldLineNum + 1, debug);
+                    const linePatch = [`${oldLineNum + 1} D ${oldLine}`, `${newLineNum + 1} A ${newLine}`];
+                    
+                    if (charPatch.length > 0 && charPatch.join('\n').length < linePatch.join('\n').length) {
+                        if (debug) console.log(`[DEBUG] Choosing char patch for line.`);
+                        cdiff.push(...charPatch);
+                    } else {
+                        if (debug) console.log(`[DEBUG] Choosing line patch for line.`);
+                        cdiff.push(...linePatch);
+                    }
+
+                    oldLineNum++;
+                    newLineNum++;
+                    i++;
+                    continue;
+                }
                 const removedValue = part.value.endsWith('\n') ? part.value.slice(0, -1) : part.value;
                 const comparisonString = removedValue + '\n';
 
@@ -291,31 +432,52 @@ export class CdiffService {
         return cdiff;
     }
 
+
     /**
-     * Inverts a cdiff patch by swapping 'A' with 'D' and 'A+' with 'D+'.
+     * Inverts a cdiff patch by swapping:
+     * - 'A' ↔ 'D'
+     * - 'A+' ↔ 'D+'
+     * - 'a' ↔ 'd'
      *
      * @param cdiff The cdiff patch array to invert.
      * @param debug If true, logs detailed internal processing steps to the console.
      * @returns A new cdiff patch array that represents the reverse operation.
      *
-     * @example
+     * @example <caption>Line-level inversion</caption>
      * const forwardPatch = ['2 D old line', '2 A new line'];
      * const invertedPatch = CdiffService.invertPatch(forwardPatch);
      * // invertedPatch is ['2 A old line', '2 D new line']
+     *
+     * @example <caption>Character-level inversion</caption>
+     * const forwardPatch = ['1 d 6 1 x', '1 a 6 1 y'];
+     * const invertedPatch = CdiffService.invertPatch(forwardPatch);
+     * // invertedPatch is ['1 a 6 1 x', '1 d 6 1 y']
+     *
+     * @example <caption>Block inversion</caption>
+     * const forwardPatch = ['2 D+ 2', 'line A', 'line B', '4 A+ 1', 'line C'];
+     * const invertedPatch = CdiffService.invertPatch(forwardPatch);
+     * // invertedPatch is ['2 A+ 2', 'line A', 'line B', '4 D+ 1', 'line C']
      */
     public static invertPatch(cdiff: string[], debug: boolean = false): string[] {
         if (debug) console.log('[DEBUG] Starting invertPatch...');
         const invertedCdiff: string[] = [];
         const blockRegex = /^(\d+)\s+([AD]\+)\s+(\d+)$/;
         const singleLineRegex = /^(\d+)\s+([AD])\s(.*)$/s;
+        const charLineRegex = /^(\d+)\s+([ad])\s(.*)$/s;
 
         for (let i = 0; i < cdiff.length; i++) {
             const command = cdiff[i];
             if (debug) console.log(`[DEBUG] Inverting command #${i}: ${command}`);
             const blockMatch = command.match(blockRegex);
             const singleLineMatch = !blockMatch ? command.match(singleLineRegex) : null;
+            const charLineMatch = !blockMatch && !singleLineMatch ? command.match(charLineRegex) : null;
 
-            if (blockMatch) {
+            if (charLineMatch) {
+                const [, lineNum, type, rest] = charLineMatch;
+                const newType = type === 'a' ? 'd' : 'a';
+                invertedCdiff.push(`${lineNum} ${newType} ${rest}`);
+                continue;
+            } else if (blockMatch) {
                 const [, coordStr, type, countStr] = blockMatch;
                 const count = parseInt(countStr, 10);
                 const newType = type === 'A+' ? 'D+' : 'A+';

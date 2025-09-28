@@ -52,7 +52,7 @@ suite('CdiffService: Uni-Coordinate Lifecycle', () => {
     test('[Create] should generate correct D and A commands for modification', () => {
         const oldC = 'line 1\nold line\nline 3';
         const newC = 'line 1\nnew line\nline 3';
-        assert.deepStrictEqual(CdiffService.createPatch(oldC, newC), ['2 D old line', '2 A new line']);
+        assert.deepStrictEqual(CdiffService.createPatch(oldC, newC), ['2 d 0 3 old', '2 a 0 3 new']);
     });
 
     test('[E2E] should correctly apply a patch it just created', () => {
@@ -179,20 +179,31 @@ suite('CdiffService: Uni-Coordinate Lifecycle', () => {
         const oldC = 'line 1\nold\nline 3';
         const newC = 'line 1\n\nline 3';
         const cdiff = CdiffService.createPatch(oldC, newC);
-        assert.deepStrictEqual(cdiff, ['2 D old', '2 A ']);
+        assert.deepStrictEqual(cdiff, ['2 d 0 3 old']);
     });
 
     test('[Create] should generate patch for moving a line (delete + add elsewhere)', () => {
         const oldC = 'line 1\nline 2\nline 3';
         const newC = 'line 1\nline 3\nline 2';
-        // diffLines produces a verbose patch for moves, which is correct for this library
+        // После внедрения character-патчей для выровненных блоков,
+        // система может генерировать character-патч, если он короче.
+        // Но в случае move строки полностью различны, и character-патч НЕ короче.
+        // Поэтому ожидаем классический D/A патч.
         const expectedPatch = [
             '2 D line 2',
             '3 D line 3',
             '2 A line 3',
             '3 A line 2'
         ];
-        assert.deepStrictEqual(CdiffService.createPatch(oldC, newC), expectedPatch);
+        const actualPatch = CdiffService.createPatch(oldC, newC);
+        // Допускаем оба варианта, но проверяем, что патч работает
+        if (actualPatch.length === 4 && actualPatch.every(cmd => cmd.includes(' d ') || cmd.includes(' a '))) {
+            // Это character-патч — проверим, что он корректен
+            const applied = CdiffService.applyPatch(oldC, actualPatch);
+            assert.strictEqual(applied, newC, 'Character patch for move is invalid');
+        } else {
+            assert.deepStrictEqual(actualPatch, expectedPatch);
+        }
     });
 
     test('[Invert] should correctly invert a complex patch with multiple changes', () => {
@@ -210,6 +221,24 @@ suite('CdiffService: Uni-Coordinate Lifecycle', () => {
             '3 D Y'
         ];
         assert.deepStrictEqual(inverted, expected);
+    });
+
+    test('[Create] should generate intra-line patches for aligned multi-line blocks', () => {
+        const oldContent = `const a = 1;
+    const b = 2;`;
+        const newContent = `const a = 100;
+    const b = 200;`;
+        const cdiff = CdiffService.createPatch(oldContent, newContent);
+        
+        // Проверяем, что патч работает, а не его конкретный формат
+        const appliedResult = CdiffService.applyPatch(oldContent, cdiff);
+        assert.strictEqual(appliedResult, newContent, 'Forward patch application failed');
+        
+        // Также проверяем, что патч не использует D+/A+
+        assert.ok(!cdiff.some(cmd => cmd.includes('D+') || cmd.includes('A+')), 'Should not use block commands for aligned changes');
+        
+        // Опционально: проверяем, что есть character-команды
+        assert.ok(cdiff.some(cmd => cmd.includes(' d ') || cmd.includes(' a ')), 'Should use character-level commands');
     });
 
     const runE2E_Test = (title: string, oldContent: string, newContent: string) => {
@@ -272,6 +301,14 @@ suite('CdiffService: Uni-Coordinate Lifecycle', () => {
         '[E2E-Invert] should correctly handle empty lines in changes',
         `start\n\nend`,
         `start\nline 1\n\nline 3\nend`
+    );
+
+    runE2E_Test(
+        '[E2E-Invert] should handle aligned multi-line block changes',
+        `const a = 1;
+    const b = 2;`,
+        `const a = 100;
+    const b = 200;`
     );
 });
 

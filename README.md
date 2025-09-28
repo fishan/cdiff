@@ -7,7 +7,7 @@ A lightweight utility for creating, applying, and inverting compact, single-coor
 
 ## What is this?
 
-This library solves the problem of generating and applying text patches. Unlike standard diff formats, `cdiff` uses a simple, line-based, single-coordinate system. This means that each command (`Add` or `Delete`) refers to a line number in the *target* file state, making the patches easy to create and reason about.
+This library solves the problem of generating and applying text patches. Unlike standard diff formats, `cdiff` uses a simple, line-based  system. This means that each command (`Add` or `Delete`) refers to a line number in the *target* file state, making the patches easy to create and reason about.
 
 ### Key Features
 
@@ -16,6 +16,8 @@ This library solves the problem of generating and applying text patches. Unlike 
 * **Block Operations**: Automatically groups consecutive additions or deletions into blocks (`A+`, `D+`) to make patches more compact.
 * **Strict & Non-Strict Modes**: Choose whether to throw an error on a content mismatch during deletion or to log a warning and continue.
 * **Cross-Platform**: Handles `\n` and `\r\n` line endings automatically.
+* **Character-Level Diffs**: Automatically generates compact intra-line patches (`d`/`a`) for small changes within a line, reducing patch size and preserving change semantics.
+* **Smart Multi-Line Handling**: Detects aligned multi-line replacements and applies character-level diffs per line when beneficial.
 
 ## Installation
 
@@ -27,8 +29,9 @@ npm install @fishan/cdiff
 
 ### `createPatch(oldContent, newContent)`
 
-Generates a patch array by comparing two strings.
+Generates a compact patch by comparing two strings. The result may contain line, block, or character-level commands, depending on what is most efficient.
 
+#### Example 1: Basic Line Replacement
 ```typescript
 import { CdiffService } from 'cdiff';
 
@@ -39,20 +42,82 @@ const cdiff = CdiffService.createPatch(oldContent, newContent);
 // Result: ['2 D old line', '2 A new line']
 console.log(cdiff);
 ```
+#### Example 2: Character-Level Change (Intra-Line)
+```typescript
+const oldContent = 'const x = 10;';
+const newContent = 'const y = 10;';
+
+const cdiff = CdiffService.createPatch(oldContent, newContent);
+// Result: ['1 d 6 1 x', '1 a 6 1 y']
+// Meaning: delete 'x' at index 6, insert 'y' at index 6
+console.log(cdiff);
+```
+#### Example 3: Multi-Line Block Addition
+```typescript
+const oldContent = 'start\nend';
+const newContent = 'start\nline A\nline B\nline C\nend';
+
+const cdiff = CdiffService.createPatch(oldContent, newContent);
+// Result:
+// [
+//   '2 A+ 3',
+//   'line A',
+//   'line B',
+//   'line C'
+// ]
+console.log(cdiff);
+```
+#### Example 4: Aligned Multi-Line Replacement (Character-Level per Line)
+```typescript
+const oldContent = 'const a = 1;\nconst b = 2;';
+const newContent = 'const a = 100;\nconst b = 200;';
+
+const cdiff = CdiffService.createPatch(oldContent, newContent);
+// Result (may vary slightly based on diff algorithm):
+// [
+//   '1 a 11 2 00',
+//   '2 a 15 2 00'
+// ]
+console.log(cdiff);
+```
+### Direct Character-Level Patching with `CdiffCharService`
+
+You can generate character-level patches **manually** for a single line without involving full-file diffing.
+
+```typescript
+import { CdiffCharService } from 'cdiff';
+
+const oldLine = 'function foo() {';
+const newLine = 'function bar() {';
+
+const charPatch = CdiffCharService.createPatch(oldLine, newLine, 5); // line 5
+// Result: ['5 d 9 3 foo', '5 a 9 3 bar']
+console.log(charPatch);
+
+// Apply it directly to a string
+const result = CdiffCharService.applyPatch(oldLine, charPatch);
+console.log(result); // 'function bar() {'
+```
+
+> 💡 Use this when you already know **which line changed** and want maximum control or performance.
+
+---
+
 
 ### `applyPatch(originalContent, cdiff, strictMode?, onWarning?)`
 
-Applies a patch to an original content string.
+Applies any valid cdiff patch (line, block, or character-level).
 
 ```typescript
-import { CdiffService } from 'cdiff';
+const original = 'alpha\nbeta\ngamma';
+const cdiff = [
+  '2 d 0 5 beta', // delete "beta"
+  '2 a 0 4 new!'  // insert "new!" at start of line 2
+];
 
-const original = 'line 1\nline 3';
-const cdiff = ['2 A line 2'];
-
-const patched = CdiffService.applyPatch(original, cdiff);
-// Result: 'line 1\nline 2\nline 3'
-console.log(patched);
+const result = CdiffService.applyPatch(original, cdiff);
+// Result: 'alpha\nnew!\ngamma'
+console.log(result);
 ```
 
 #### Handling Mismatches with `onWarning`
@@ -78,38 +143,34 @@ if (warnings.length > 0) {
 }
 ```
 
-### `invertPatch(cdiff)`
+### `invertPatch(cdiff)` + `applyInvertedPatch(...)`
 
-Inverts a patch, swapping `A` with `D` and `A+` with `D+`.
-
-```typescript
-import { CdiffService } from 'cdiff';
-
-const cdiff = ['2 D old line', '2 A new line'];
-const invertedCdiff = CdiffService.invertPatch(cdiff);
-
-// Result: ['2 A old line', '2 D new line']
-console.log(invertedCdiff);
-```
-
-### `applyInvertedPatch(...)`
-
-A convenience method, which is an alias for `applyPatch`. It's used to apply an inverted patch to restore the original content.
+Enables full round-trip patching: **apply → invert → restore**.
 
 ```typescript
-const oldContent = "A\nB\nC";
-const newContent = "A\nX\nC";
+const old = 'A\nB\nC';
+const updated = 'A\nX\nY\nC';
 
-// Forward
-const patch = CdiffService.createPatch(oldContent, newContent);
-const result = CdiffService.applyPatch(oldContent, patch);
-// result === newContent
+// 1. Create patch
+const patch = CdiffService.createPatch(old, updated);
 
-// Backward
-const invertedPatch = CdiffService.invertPatch(patch);
-const restored = CdiffService.applyInvertedPatch(newContent, invertedPatch);
-// restored === oldContent
+// 2. Apply forward
+const result = CdiffService.applyPatch(old, patch);
+// result === updated
+
+// 3. Invert patch
+const inverted = CdiffService.invertPatch(patch);
+// If patch was ['2 D B', '2 A X', '3 A Y'],
+// inverted will be ['2 A B', '2 D X', '3 D Y']
+
+// 4. Restore original
+const restored = CdiffService.applyInvertedPatch(updated, inverted);
+// restored === old
 ```
+
+> ✅ Works seamlessly with **character-level commands** (`a` ↔ `d`).
+
+---
 
 ## Patch Format
 
@@ -129,15 +190,48 @@ The patch is an array of strings, where each string is a command.
     * `content line 1`
     * `content line 2`
     * ...
+* **Character-Level Add**: `lineNumber a index length content`
+    * Inserts `content` (of `length` characters) at `index` in the line.
+    * Example: `2 a 6 1 y` → inserts "y" at position 6 in line 2.
+* **Character-Level Delete**: `lineNumber d index length content`
+    * Deletes `length` characters starting at `index` from the line. The `content` field is the expected text to delete (for validation).
+    * Example: `2 d 6 1 x` → deletes "x" (length 1) at position 6 in line 2.
+
+> 💡 **Note**: Character-level commands (`a`/`d`) are automatically generated by `createPatch` when they produce a smaller patch than full-line replacements.
 
 ## Testing
 
 The library is extensively tested to ensure reliability and robustness across various edge cases.
 
 <details>
-<summary><strong>Click to view Test Results (57 passing)</strong></summary>
+<summary><strong>Click to view Test Results (78 passing)</strong></summary>
 
 ```
+  CdiffCharService: Character-level Patching (Comprehensive)
+    createPatch: Generation Logic
+      ✔ should return an empty array for identical strings
+      ✔ should generate a simple addition patch
+      ✔ should generate a simple deletion patch
+      ✔ should generate a patch that correctly transforms the string
+    Whitespace Handling
+      ✔ should correctly handle leading/trailing whitespace in content
+      ✔ should handle changes involving only whitespace (E2E check)
+      ✔ should handle patches for whitespace-only strings
+    Robustness and Edge Cases
+      ✔ should handle multiple non-contiguous modifications
+      ✔ should handle a very long string with a small change
+      ✔ should apply patch regardless of command order in array
+    End-to-End Lifecycle
+      ✔ should handle simple modification
+      ✔ should handle additions at the beginning
+      ✔ should handle deletions from the end
+      ✔ should handle creating a string from empty
+      ✔ should handle deleting the entire string
+      ✔ should handle complete rewrite (line-level patch)
+      ✔ should handle multiple changes (line-level patch)
+      ✔ should handle changes with special characters
+      ✔ should handle multiple non-contiguous modifications
+
   CdiffService: Uni-Coordinate Lifecycle
     ✔ [Apply] should add a single line
     ✔ [Apply] should delete a single line
@@ -164,6 +258,7 @@ The library is extensively tested to ensure reliability and robustness across va
     ✔ [Create] should generate patch for replacement with empty line
     ✔ [Create] should generate patch for moving a line (delete + add elsewhere)
     ✔ [Invert] should correctly invert a complex patch with multiple changes
+    ✔ [Create] should generate intra-line patches for aligned multi-line blocks
     ✔ [E2E-Invert] should handle multiple separate blocks of changes
     ✔ [E2E-Invert] should handle changes at the very beginning of the file
     ✔ [E2E-Invert] should handle changes at the very end of the file
@@ -172,6 +267,7 @@ The library is extensively tested to ensure reliability and robustness across va
     ✔ [E2E-Invert] should handle deletion of all content
     ✔ [E2E-Invert] should handle creation of a file from empty
     ✔ [E2E-Invert] should correctly handle empty lines in changes
+    ✔ [E2E-Invert] should handle aligned multi-line block changes
 
   CdiffService: Additional Edge Cases and Robustness
     ✔ [Apply] should ignore invalid patch commands
