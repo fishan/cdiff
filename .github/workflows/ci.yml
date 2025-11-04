@@ -1,0 +1,39 @@
+# Your workflow name. Displayed in GitHub Actions.
+name: CI Build and Test
+
+# Triggers: Run this workflow...
+on:
+  # ...on any push to the 'main' branch
+  push:
+    branches: [ "main" ]
+  # ...on any pull request opened to the 'main' branch
+  pull_request:
+    branches: [ "main" ]
+
+# Jobs to be executed
+jobs:
+  # Job name (can be any name)
+  build-and-test:
+    # Run on the latest Ubuntu version
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Clone your repository to the virtual machine
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Set up Node.js (version 18.x) and cache npm
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+          cache: 'npm'
+
+      # 3. Install all dependencies (including rimraf, mocha, terser)
+      - name: Install Dependencies
+        run: npm install
+
+      # 4. Run your main "test:prod" script
+      # (It will automatically execute clean, build, minify and tests on .min.js)
+      - name: Run Production Test Suite
+        run: npm run test:prod
