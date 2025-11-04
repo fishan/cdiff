@@ -1,7 +1,6 @@
 # @fishan/cdiff
 
 [![NPM Version](https://img.shields.io/npm/v/@fishan/cdiff.svg?style=flat)](https://www.npmjs.com/package/@fishan/cdiff)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/fishan/cdiff/ci.yml?branch=main)](https://github.com/fishan/cdiff/actions)
 [![License](https://img.shields.io/npm/l/@fishan/cdiff.svg)](./LICENSE)
 
 **A robust library for creating, applying, and inverting compact, single-coordinate diff patches. Features advanced options including char-level operations, patch compression, and configurable safety levels ('unsafe' mode).**
