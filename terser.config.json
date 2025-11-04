@@ -1,0 +1,17 @@
+{
+  "module": true,
+  "compress": {
+    "global_defs": {
+      "__DEV__": false
+    },
+    "passes": 2,
+    "dead_code": true
+  },
+  "mangle": {
+    "toplevel": false
+  },
+  "format": {
+    "comments": false
+  },
+  "sourceMap": false
+}

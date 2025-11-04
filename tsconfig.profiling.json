@@ -1,0 +1,14 @@
+// version: 1.0.0
+// file: tsconfig.profiling.json
+// description: TypeScript configuration to build both library and benchmarks for profiling.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": false
+  },
+  "include": [
+    "src/**/*",
+    "benchmarks/**/*"
+  ]
+}

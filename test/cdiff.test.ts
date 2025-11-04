@@ -49,7 +49,7 @@ suite('CdiffService: Uni-Coordinate Lifecycle', () => {
         assert.deepStrictEqual(CdiffService.createPatch(oldC, newC), ['2 D line 2']);
     });
 
-    test('[Create] should generate correct D and A commands for modification', () => {
+    test('[Create] should generate correct d and a commands for modification', () => {
         const oldC = 'line 1\nold line\nline 3';
         const newC = 'line 1\nnew line\nline 3';
         assert.deepStrictEqual(CdiffService.createPatch(oldC, newC), ['2 d 0 3 old', '2 a 0 3 new']);
@@ -59,8 +59,8 @@ suite('CdiffService: Uni-Coordinate Lifecycle', () => {
         const oldContent = "A\nB\nC\nD\nE\nF\nG";
         const newContent = "A\nX\nY\nE\nF\nG-modified";
         
-        const cdiff = CdiffService.createPatch(oldContent, newContent);
-        const result = CdiffService.applyPatch(oldContent, cdiff);
+        const cdiff = CdiffService.createPatch(oldContent, newContent, { debug: false });
+        const result = CdiffService.applyPatch(oldContent, cdiff, { debug: false});
         
         assert.strictEqual(result, newContent);
     });
@@ -185,25 +185,16 @@ suite('CdiffService: Uni-Coordinate Lifecycle', () => {
     test('[Create] should generate patch for moving a line (delete + add elsewhere)', () => {
         const oldC = 'line 1\nline 2\nline 3';
         const newC = 'line 1\nline 3\nline 2';
-        // После внедрения character-патчей для выровненных блоков,
-        // система может генерировать character-патч, если он короче.
-        // Но в случае move строки полностью различны, и character-патч НЕ короче.
-        // Поэтому ожидаем классический D/A патч.
+        
         const expectedPatch = [
             '2 D line 2',
-            '3 D line 3',
-            '2 A line 3',
             '3 A line 2'
         ];
-        const actualPatch = CdiffService.createPatch(oldC, newC);
-        // Допускаем оба варианта, но проверяем, что патч работает
-        if (actualPatch.length === 4 && actualPatch.every(cmd => cmd.includes(' d ') || cmd.includes(' a '))) {
-            // Это character-патч — проверим, что он корректен
-            const applied = CdiffService.applyPatch(oldC, actualPatch);
-            assert.strictEqual(applied, newC, 'Character patch for move is invalid');
-        } else {
-            assert.deepStrictEqual(actualPatch, expectedPatch);
-        }
+
+        const actualPatch = CdiffService.createPatch(oldC, newC);      
+        assert.deepStrictEqual(actualPatch, expectedPatch);
+        const applied = CdiffService.applyPatch(oldC, actualPatch);
+        assert.strictEqual(applied, newC, 'The generated patch did not produce the correct result');
     });
 
     test('[Invert] should correctly invert a complex patch with multiple changes', () => {
@@ -215,6 +206,7 @@ suite('CdiffService: Uni-Coordinate Lifecycle', () => {
         ];
         const inverted = CdiffService.invertPatch(cdiff);
         const expected = [
+            
             '2 A B',
             '3 A C',
             '2 D X',
@@ -228,27 +220,18 @@ suite('CdiffService: Uni-Coordinate Lifecycle', () => {
     const b = 2;`;
         const newContent = `const a = 100;
     const b = 200;`;
-        const cdiff = CdiffService.createPatch(oldContent, newContent);
-        
-        // Проверяем, что патч работает, а не его конкретный формат
+        const cdiff = CdiffService.createPatch(oldContent, newContent);        
         const appliedResult = CdiffService.applyPatch(oldContent, cdiff);
-        assert.strictEqual(appliedResult, newContent, 'Forward patch application failed');
-        
-        // Также проверяем, что патч не использует D+/A+
-        assert.ok(!cdiff.some(cmd => cmd.includes('D+') || cmd.includes('A+')), 'Should not use block commands for aligned changes');
-        
-        // Опционально: проверяем, что есть character-команды
+        assert.strictEqual(appliedResult, newContent, 'Forward patch application failed');        
+        assert.ok(!cdiff.some(cmd => cmd.includes('D+') || cmd.includes('A+')), 'Should not use block commands for aligned changes');        
         assert.ok(cdiff.some(cmd => cmd.includes(' d ') || cmd.includes(' a ')), 'Should use character-level commands');
     });
 
     const runE2E_Test = (title: string, oldContent: string, newContent: string) => {
         test(title, () => {
-            // Forward
             const cdiff = CdiffService.createPatch(oldContent, newContent);
             const appliedResult = CdiffService.applyPatch(oldContent, cdiff);
             assert.strictEqual(appliedResult, newContent, "Forward patch application failed");
-
-            // Backward
             const invertedCdiff = CdiffService.invertPatch(cdiff);
             const restoredResult = CdiffService.applyInvertedPatch(newContent, invertedCdiff);
             assert.strictEqual(restoredResult, oldContent, "Inverted patch application failed to restore original content");
@@ -386,7 +369,7 @@ suite('CdiffService: Additional Edge Cases and Robustness', () => {
             '2 A new line'
         ];
         assert.deepStrictEqual(cdiff, expectedPatch);
-        const result = CdiffService.applyPatch(oldContent, cdiff, true);
+        const result = CdiffService.applyPatch(oldContent, cdiff);
         assert.strictEqual(result, newContent);
     });
 
@@ -484,13 +467,11 @@ suite('CdiffService: Extended Robustness Tests', () => {
         assert.deepStrictEqual(cdiff, expectedPatch);
         const appliedResult = CdiffService.applyPatch(oldContent, cdiff);
         assert.strictEqual(appliedResult, newContent, 'Forward application failed');
-
         const invertedCdiff = CdiffService.invertPatch(cdiff);
         const restoredResult = CdiffService.applyInvertedPatch(newContent, invertedCdiff);
         assert.strictEqual(restoredResult, oldContent, 'Inverted restoration failed');
     });
 
-    // Тест 4: Удаление с некорректным содержимым
     test('[Apply] should ignore deletion with incorrect content', () => {
         const original = 'line 1\nline 2\nline 3';
         const cdiff = [
@@ -512,7 +493,6 @@ suite('CdiffService: Extended Robustness Tests', () => {
         const cdiff = CdiffService.createPatch(oldContent, newContent);
         const appliedResult = CdiffService.applyPatch(oldContent, cdiff);
         assert.strictEqual(appliedResult, newContent, 'Forward application failed');
-
         const invertedCdiff = CdiffService.invertPatch(cdiff);
         const restoredResult = CdiffService.applyInvertedPatch(newContent, invertedCdiff);
         assert.strictEqual(restoredResult, oldContent, 'Inverted restoration failed');
@@ -520,7 +500,6 @@ suite('CdiffService: Extended Robustness Tests', () => {
 });
 
 suite('CdiffService: Whitespace and Special Characters', () => {
-
     test('[Create+Apply] should handle exact whitespace in deletions', () => {
         const oldContent = 'line 1\n  spaces  \nline 3';
         const newContent = 'line 1\nnew line\nline 3';
@@ -530,7 +509,7 @@ suite('CdiffService: Whitespace and Special Characters', () => {
             '2 A new line'
         ];
         assert.deepStrictEqual(cdiff, expectedPatch);
-        const result = CdiffService.applyPatch(oldContent, cdiff, true);
+        const result = CdiffService.applyPatch(oldContent, cdiff);
         assert.strictEqual(result, newContent);
     });
 
@@ -543,11 +522,11 @@ suite('CdiffService: Whitespace and Special Characters', () => {
             '2 A new line'
         ];
         assert.deepStrictEqual(cdiff, expectedPatch);
-        const appliedResult = CdiffService.applyPatch(oldContent, cdiff, true);
+        const appliedResult = CdiffService.applyPatch(oldContent, cdiff);
         assert.strictEqual(appliedResult, newContent, 'Forward application failed');
 
         const invertedCdiff = CdiffService.invertPatch(cdiff);
-        const restoredResult = CdiffService.applyInvertedPatch(newContent, invertedCdiff, true);
+        const restoredResult = CdiffService.applyInvertedPatch(newContent, invertedCdiff);
         assert.strictEqual(restoredResult, oldContent, 'Inverted restoration failed');
     });
 
@@ -555,7 +534,7 @@ suite('CdiffService: Whitespace and Special Characters', () => {
         const original = 'line 1\n  spaces  \nline 3';
         const cdiff = ['2 D spaces', '2 A new line'];
         const expected = 'line 1\nnew line\n  spaces  \nline 3';
-        const result = CdiffService.applyPatch(original, cdiff, false);
+        const result = CdiffService.applyPatch(original, cdiff, { strictMode: false });
         assert.strictEqual(result, expected);
     });
 
@@ -564,7 +543,7 @@ suite('CdiffService: Whitespace and Special Characters', () => {
         const cdiff = ['2 D spaces', '2 A new line'];
         let errorThrown = false;
         try {
-            CdiffService.applyPatch(original, cdiff, true);
+            CdiffService.applyPatch(original, cdiff, { strictMode: true });
         } catch (e) {
             errorThrown = true;
             if (e instanceof Error) {
@@ -588,7 +567,7 @@ suite('CdiffService: Advanced Whitespace and Obfuscation', () => {
             '2 A new code'
         ];
         assert.deepStrictEqual(cdiff, expectedPatch);
-        const result = CdiffService.applyPatch(oldContent, cdiff, true);
+        const result = CdiffService.applyPatch(oldContent, cdiff);
         assert.strictEqual(result, newContent);
     });
 
@@ -601,11 +580,11 @@ suite('CdiffService: Advanced Whitespace and Obfuscation', () => {
             '2 A new line'
         ];
         assert.deepStrictEqual(cdiff, expectedPatch);
-        const appliedResult = CdiffService.applyPatch(oldContent, cdiff, true);
+        const appliedResult = CdiffService.applyPatch(oldContent, cdiff);
         assert.strictEqual(appliedResult, newContent, 'Forward application failed');
 
         const invertedCdiff = CdiffService.invertPatch(cdiff);
-        const restoredResult = CdiffService.applyInvertedPatch(newContent, invertedCdiff, true);
+        const restoredResult = CdiffService.applyInvertedPatch(newContent, invertedCdiff);
         assert.strictEqual(restoredResult, oldContent, 'Inverted restoration failed');
     });
 
@@ -618,8 +597,33 @@ suite('CdiffService: Advanced Whitespace and Obfuscation', () => {
             '2 A new line'
         ];
         assert.deepStrictEqual(cdiff, expectedPatch);
-        const result = CdiffService.applyPatch(oldContent, cdiff, true);
+        const result = CdiffService.applyPatch(oldContent, cdiff);
         assert.strictEqual(result, newContent);
     });
+
+    test('[Apply] should handle additions after intermediate content is exhausted', () => {
+        const original = 'line 1\nline 2\nline 3';
+        const cdiff = [
+            '2 D line 2',
+            '100 A+ 2', 
+            'new line A',
+            'new line B'
+        ];
+        const expected = 'line 1\nline 3\nnew line A\nnew line B';
+        const result = CdiffService.applyPatch(original, cdiff, { debug: false });
+        assert.strictEqual(result, expected);
+    });
+        test('[Apply] should insert additions at exact positions', () => {
+        const original = 'line 1\nline 2\nline 3\nline 4';
+        const cdiff = [
+            '2 A+ 2',
+            'inserted A',
+            'inserted B'
+        ];
+        const expected = 'line 1\ninserted A\ninserted B\nline 2\nline 3\nline 4';
+        const result = CdiffService.applyPatch(original, cdiff, { debug: false });
+        assert.strictEqual(result, expected);
+    });
+
 });
 

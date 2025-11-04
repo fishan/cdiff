@@ -1,10 +1,10 @@
 {
   "name": "@fishan/cdiff",
-  "version": "1.2.0",
-  "description": "A lightweight utility for creating, applying, and inverting compact, single-coordinate diff patches with block operation support.",
-  "main": "dist/cdiff.js",
+  "version": "2.0.0",
+  "description": "A robust library for creating, applying, and inverting compact, single-coordinate diff patches. Features advanced options including char-level operations, patch compression, and configurable safety levels ('unsafe' mode).",
+  "main": "dist/src/cdiff.js",
   "type": "module",
-  "types": "dist/cdiff.d.ts",
+  "types": "dist/src/cdiff.d.ts",
   "author": "Aleks Fishan a.fishan@gmail.com",
   "license": "MIT",
   "directories": {
@@ -19,15 +19,30 @@
     "url": "https://github.com/fishan/cdiff/issues"
   },
   "scripts": {
-    "test": "mocha",
-    "build:ts": "tsc",
-    "build:minify": "terser dist/cdiff.js --output dist/cdiff.min.js --compress --mangle && terser dist/cdiff_chars.js --output dist/cdiff_chars.min.js --compress --mangle",
-    "build": "npm run build:ts && npm run build:minify",
+    "test": "npm run test:prod",
+    "clean": "rimraf dist",
+    "build:ts": "tsc -p tsconfig.json",
+    "build:profile": "tsc -p tsconfig.profiling.json",
+    "build:minify": "terser dist/src/cdiff.js -o dist/cdiff.min.js --compress --mangle && terser dist/src/cdiff_chars.js -o dist/cdiff_chars.min.js --compress --mangle",
+    "build": "npm run clean && npm run build:ts && npm run build:minify",
+    "build:prod:cdiff": "terser dist/src/cdiff.js -o dist/cdiff.min.js --compress --mangle && terser dist/src/cdiff_chars.js -o dist/cdiff_chars.min.js --compress --mangle",
+    "build:prod": "npm run clean && npm run build:ts && npm run build:prod:cdiff",
+    "test:dev": "node --loader ts-node/esm --no-warnings ./node_modules/mocha/bin/mocha.js --bail test/*.ts",
+    "test:build": "npm run build:ts && mocha --bail --ignore \"test/*.ts\" \"dist/test/*.js\"",
+    "test:prod:swap": "node -e \"const fs = require('fs'); try{fs.renameSync('dist/src/cdiff.js','dist/src/cdiff.js.bak')}catch(e){}; try{fs.renameSync('dist/cdiff.min.js','dist/src/cdiff.js')}catch(e){}; try{fs.renameSync('dist/src/cdiff_chars.js','dist/src/cdiff_chars.js.bak')}catch(e){}; try{fs.renameSync('dist/cdiff_chars.min.js','dist/src/cdiff_chars.js')}catch(e){};\"",
+    "test:prod:restore": "node -e \"const fs = require('fs'); try{fs.renameSync('dist/src/cdiff.js','dist/cdiff.min.js')}catch(e){}; try{fs.renameSync('dist/src/cdiff.js.bak','dist/src/cdiff.js')}catch(e){}; try{fs.renameSync('dist/src/cdiff_chars.js','dist/cdiff_chars.min.js')}catch(e){}; try{fs.renameSync('dist/src/cdiff_chars.js.bak','dist/src/cdiff_chars.js')}catch(e){};\"",
+    "test:prod": "npm run build && npm run test:prod:swap && mocha --bail --ignore \"test/*.ts\" \"dist/test/*.js\" && npm run test:prod:restore",
     "prepublishOnly": "npm run build",
-    "benchmark": "npm run build && node benchmarks/fetch-data.js && node --loader ts-node/esm --no-warnings benchmarks/index.ts"
+    "profile:myers": "npm run build:profile && node --cpu-prof dist/benchmarks/myers_benchmark.js",
+    "profile:gst": "npm run build:profile && node --cpu-prof dist/benchmarks/index.js",
+    "benchmark": "npm run build  && node --loader ts-node/esm --no-warnings benchmarks/index.ts",
+    "benchmark:myers": "npm run build && node --loader ts-node/esm --no-warnings benchmarks/myers_benchmark.ts",
+    "benchmark:tuner": "npm run build  && node --loader ts-node/esm --no-warnings benchmarks/tuner.ts"
   },
   "files": [
-    "dist"
+    "dist/src",
+    "dist/cdiff.min.js",
+    "dist/cdiff_chars.min.js"
   ],
   "keywords": [
     "diff",
@@ -41,15 +56,23 @@
     "unidirectional-patch"
   ],
   "devDependencies": {
+    "@fishan/cdiff": "^1.2.0",
+    "@types/diff": "^5.2.1",
     "@types/diff-match-patch": "^1.0.36",
     "@types/mocha": "^10.0.10",
+    "@types/progress": "^2.0.7",
+    "cdiff_v1": "npm:@fishan/cdiff@^1.2.0",
+    "diff": "^8.0.2",
     "diff-match-patch": "^1.0.5",
+    "jest": "^30.2.0",
     "mocha": "^11.7.2",
+    "progress": "^2.0.3",
+    "rimraf": "^5.0.10",
     "terser": "^5.44.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2"
   },
   "dependencies": {
-    "diff": "^8.0.2"
+    "@fishan/myers-core-diff": "^1.0.2"
   }
 }

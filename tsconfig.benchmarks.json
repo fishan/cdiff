@@ -1,0 +1,12 @@
+// version: 1.0.0
+// file: tsconfig.benchmarks.json
+// description: TypeScript configuration specifically for running benchmarks with ts-node.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": [
+    "benchmarks/**/*"
+  ]
+}

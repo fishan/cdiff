@@ -1,6 +1,14 @@
 # Dependencies
 /node_modules
 
+# TypeScript cache
+/.tsbuildinfo
+
+#docs
+/docs
+
+/benchmarks/tuning_results
+
 # Build output
 /dist
 

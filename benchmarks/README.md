@@ -31,62 +31,119 @@ Results generated on a standard development machine.
 
 ---
 
-### **Scenario: Realistic Changes**
+### **Standard Benchmarks**
 
-#### Realistic change in `small.json` (package.json)
-*Changing a version number.*
+**=== Realistic change in small (package (source code)on) ===**
+| (index) | Library | Patch Size (B) | Create (ms) | Apply (ms) | Total (ms) | Correctness |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 0 | 'cdiff 🥇' | 50 | '10.48' | '5.32' | '15.81' | '✅ OK' |
+| 1 | 'jsdiff (unified)' | 259 | '2.65' | '2.52' | '5.17' | '✅ OK' |
+| 2 | 'diff-match-patch' | 62 | '3.70' | '0.88' | '4.58 🥇' | '✅ OK' |
 
-| Library | Patch Size (B) | Create (ms) | Apply (ms) | Total (ms) |
-| :--- | :--- | :--- | :--- | :--- |
-| `cdiff` | 63 | 3.31 | 1.42 | 4.73 |
-| `jsdiff (unified)` | 259 | 2.52 | 1.45 | 3.97 |
-| `diff-match-patch` 🥇 | **62** | 2.28 | 0.62 | **2.90** 🥇 |
+**=== Realistic change in medium (source code) ===**
+| (index) | Library | Patch Size (B) | Create (ms) | Apply (ms) | Total (ms) | Correctness |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 0 | 'cdiff 🥇' | 26 | '1.31' | '0.30' | '1.61' | '✅ OK' |
+| 1 | 'jsdiff (unified)' | 401 | '1.15' | '1.58' | '2.72' | '✅ OK' |
+| 2 | 'diff-match-patch' | 54 | '1.05' | '0.08' | '1.13 🥇' | '✅ OK' |
 
-#### Realistic change in `medium.js` (source code)
-*Renaming a class name.*
+**=== Realistic change in large (source code) ===**
+| (index) | Library | Patch Size (B) | Create (ms) | Apply (ms) | Total (ms) | Correctness |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 0 | 'cdiff 🥇' | 41 | '28.86' | '3.86' | '32.73' | '✅ OK' |
+| 1 | 'jsdiff (unified)' | 197 | '19.33' | '5.39' | '24.71' | '✅ OK' |
+| 2 | 'diff-match-patch' | 59 | '1.09' | '0.54' | '1.63 🥇' | '✅ OK' |
 
-| Library | Patch Size (B) | Create (ms) | Apply (ms) | Total (ms) |
-| :--- | :--- | :--- | :--- | :--- |
-| `cdiff` 🥇 | **20** | 5.65 | 0.21 | 5.86 |
-| `jsdiff (unified)` | 401 | 4.03 | 0.56 | 4.59 |
-| `diff-match-patch` | 54 | 0.33 | 0.03 | **0.36** 🥇 |
+### **Advanced Scenarios**
 
-#### Realistic change in `large.js` (source code)
-*Adding a comment to the top of the file.*
+**=== Multiple Small Changes (large file) ===**
+| (index) | Library | Patch Size (B) | Create (ms) | Apply (ms) | Total (ms) | Correctness |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 0 | 'cdiff 🥇' | 855 | '98.58' | '5.21' | '103.78' | '✅ OK' |
+| 1 | 'jsdiff (unified)' | 16942 | '18.59' | '3.54' | '22.13 🥇' | '✅ OK' |
+| 2 | 'diff-match-patch' | 3473 | '93.10' | '16.75' | '109.84' | '✅ OK' |
 
-| Library | Patch Size (B) | Create (ms) | Apply (ms) | Total (ms) |
-| :--- | :--- | :--- | :--- | :--- |
-| `cdiff` 🥇 | **33** | 206.91 | 4.55 | 211.46 |
-| `jsdiff (unified)` | 197 | 347.77 | 2.39 | 350.16 |
-| `diff-match-patch` | 59 | 0.44 | 0.43 | **0.86** 🥇 |
-
----
-
-### **Scenario: Stress Tests**
-
-#### Code Refactoring (many small changes in `large.js`)
-*Multiple variable renames throughout a large file.*
-
-| Library | Patch Size (B) | Create (ms) | Apply (ms) | Total (ms) |
-| :--- | :--- | :--- | :--- | :--- |
-| `cdiff` 🥇 | **1258** | 205.37 | 6.70 | 212.06 |
-| `jsdiff (unified)` | 16942 | 176.04 | 6.87 | 182.91 |
-| `diff-match-patch` | 3473 | 63.72 | 10.43 | **74.15** 🥇 |
-
-#### Block Move (structural shift in `large.js`)
+**=== Block Move (structural shift in large.js) ===**
 *Moving a 50-line block of code.*
+| (index) | Library | Patch Size (B) | Create (ms) | Apply (ms) | Total (ms) | Correctness |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 0 | 'cdiff 🥇' | 1830 | '38.25' | '5.08' | '43.33' | '✅ OK' |
+| 1 | 'jsdiff (unified)' | 2938 | '16.78' | '3.18' | '19.95' | '✅ OK' |
+| 2 | 'diff-match-patch' | 3229 | '3.02' | '1.24' | '4.26 🥇' | '✅ OK' |
 
-| Library | Patch Size (B) | Create (ms) | Apply (ms) | Total (ms) |
-| :--- | :--- | :--- | :--- | :--- |
-| `cdiff` 🥇 | **2848** | 190.37 | 5.13 | 195.50 |
-| `jsdiff (unified)` | 2938 | 172.49 | 5.08 | 177.57 |
-| `diff-match-patch` | 3229 | 2.61 | 4.92 | **7.54** 🥇 |
-
-#### Whitespace Change (indentation in `medium.js`)
+**=== Whitespace Change (indentation in medium.js) ===**
 *Changing indentation from 2 to 4 spaces across a file.*
+| (index) | Library | Patch Size (B) | Create (ms) | Apply (ms) | Total (ms) | Correctness |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 0 | 'cdiff 🥇' | 989 | '36.07' | '4.40' | '40.47' | '✅ OK' |
+| 1 | 'jsdiff (unified)' | 10834 | '21.00' | '0.52' | '21.52 🥇' | '✅ OK' |
+| 2 | 'diff-match-patch' | 7500 | '88.11' | '0.40' | '88.51' | '✅ OK' |
 
-| Library | Patch Size (B) | Create (ms) | Apply (ms) | Total (ms) |
-| :--- | :--- | :--- | :--- | :--- |
-| `cdiff` | 9813 | 14.57 | 1.54 | **16.11** 🥇 |
-| `jsdiff (unified)` | 10834 | 13.64 | 3.12 | 16.76 |
-| `diff-match-patch` 🥇 | **7500** | 68.97 | 1.72 | 70.69 |
+### **Inversion Benchmarks (Refactoring Scenario)**
+
+**=== Invert Patch from Refactoring ===**
+| (index) | Library | Invert+Apply (ms) | Correctness |
+| :--- | :--- | :--- | :--- |
+| 0 | 'cdiff 🥇' | '6.97' | '✅ OK' |
+| 1 | 'jsdiff (unified)' | '17.11' | '✅ OK' |
+| 2 | 'diff-match-patch' | '82.50' | '✅ OK' |
+
+### **Core Strength Benchmarks**
+
+**=== Huge File (50k lines) ===**
+| (index) | Library | Patch Size (B) | Create (ms) | Apply (ms) | Total (ms) | Correctness |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 0 | 'cdiff 🥇' | 281 | '199.66' | '27.13' | '226.79' | '✅ OK' |
+| 1 | 'jsdiff (unified)' | 2222 | '85.99' | '17.42' | '103.41' | '✅ OK' |
+| 2 | 'diff-match-patch' | 470 | '39.52' | '14.76' | '54.28 🥇' | '✅ OK' |
+
+**=== Binary Data (1KB) ===**
+| (index) | Library | Patch Size (B) | Create (ms) | Apply (ms) | Total (ms) | Correctness |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 0 | 'cdiff 🥇' | 57 | '0.74' | '0.73' | '1.47' | '✅ OK' |
+| 1 | 'jsdiff (unified)' | 1672 | '0.16' | '0.31' | '0.47' | '✅ OK' |
+| 2 | 'diff-match-patch' | 296 | '0.12' | '0.05' | '0.18 🥇' | '✅ OK' |
+
+**=== "Dirty" Data (Large common prefix/suffix) ===**
+| (index) | Library | Patch Size (B) | Create (ms) | Apply (ms) | Total (ms) | Correctness |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 0 | 'cdiff 🥇' | 47 | '0.89' | '0.29' | '1.18' | '✅ OK' |
+| 1 | 'jsdiff (unified)' | 100206 | '0.56' | '0.28' | '0.84' | '✅ OK' |
+| 2 | 'diff-match-patch' | 58 | '0.26' | '0.04' | '0.30 🥇' | '✅ OK' |
+
+### **Edge Case & Stress Test Scenarios**
+
+**=== Low Entropy (Repeating Data) ===**
+| (index) | Library | Patch Size (B) | Create (ms) | Apply (ms) | Total (ms) | Correctness |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 0 | 'cdiff 🥇' | 105 | '20.73' | '4.55' | '25.28' | '✅ OK' |
+| 1 | 'jsdiff (unified)' | 1972 | '13.08' | '4.02' | '17.10 🥇' | '✅ OK' |
+| 2 | 'diff-match-patch' | 330 | '108.60' | '2.95' | '111.55' | '✅ OK' |
+
+**=== Single Line Changes (Minified JS) ===**
+| (index) | Library | Patch Size (B) | Create (ms) | Apply (ms) | Total (ms) | Correctness |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 0 | 'cdiff 🥇' | 474 | '325.23' | '11.38' | '336.61' | '✅ OK' |
+| 1 | 'jsdiff (unified)' | 336055 | '1.15' | '0.50' | '1.65 🥇' | '✅ OK' |
+| 2 | 'diff-match-patch' | 3331 | '61.17' | '7.86' | '69.03' | '✅ OK' |
+
+**=== Complete Replacement (Low Similarity) ===**
+| (index) | Library | Patch Size (B) | Create (ms) | Apply (ms) | Total (ms) | Correctness |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 0 | 'cdiff 🥇' | 299375 | '1401.53' | '26.18' | '1427.72' | '✅ OK' |
+| 1 | 'jsdiff (unified)' | 301830 | '199.55' | '10.76' | '210.31 🥇' | '✅ OK' |
+| 2 | 'diff-match-patch' | 379704 | '1009.81' | '0.36' | '1010.18' | '✅ OK' |
+
+**=== Complete Replacement Invert (Low Similarity) ===**
+| (index) | Library | Invert+Apply (ms) | Correctness |
+| :--- | :--- | :--- | :--- |
+| 0 | 'cdiff 🥇' | '28.63' | '✅ OK' |
+| 1 | 'jsdiff (unified)' | '969.17' | '✅ OK' |
+| 2 | 'diff-match-patch' | '1001.04' | '✅ OK' |
+
+**=== Swapped Blocks ===**
+| (index) | Library | Patch Size (B) | Create (ms) | Apply (ms) | Total (ms) | Correctness |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 0 | 'cdiff 🥇' | 4487 | '24.17' | '5.90' | '30.07' | '✅ OK' |
+| 1 | 'jsdiff (unified)' | 6346 | '17.99' | '3.08' | '21.07 🥇' | '✅ OK' |
+| 2 | 'diff-match-patch' | 7552 | '260.23' | '3.34' | '263.57' | '✅ OK' |
