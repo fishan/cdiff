@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2025-12-12
+
+### Added
+- **Granularity Control**: Added `granularity` option to `createPatch()` with values:
+  - `'lines'`: Forces line-level commands only (A/D/E+)
+  - `'mixed'` (default): Automatically chooses between line and character commands based on patch size
+- **Optimal Compression**: Added `optimal: true` option to ensure compressed patches are never larger than uncompressed
+- **Improved Size Comparison**: Enhanced `optimal` logic to accurately compare compressed vs uncompressed patch sizes
+
+### Changed
+- **Optimized Patch Generation**: Refactored `createPatch()` to skip unnecessary char-patch generation in `granularity: 'lines'` mode
+- **Enhanced Compression Logic**: Improved `compress` option to work correctly with `equalBlocksSeparate` and `optimal` flag
+- **Validation Improvements**: Updated validation flow to respect granularity settings
+
+### Fixed
+- **Memory Optimization**: Reduced memory usage by avoiding redundant char-patch generation in line-only mode
+- **Size Accuracy**: Fixed patch size comparison in `optimal` mode to correctly account for line separators
+- **Granularity Validation**: Added input validation for `granularity` parameter
+
 ## [2.0.0] - 2025-11-04
 
 ### Added

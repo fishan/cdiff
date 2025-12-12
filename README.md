@@ -46,6 +46,8 @@ This tool is designed for maximum efficiency, generating highly optimized, inver
 * **"Unsafe" Deletions**: Supports `deletionStrategy: 'unsafe'` to generate `X`/`x` commands (which omit deleted content), creating minimal-sized "one-way" patches perfect for software updates.
 * **Fully Invertible**: "Safe" patches (the default) are 100% invertible, allowing you to move both forward (A -> B) and backward (B -> A).
 * **Pluggable Core Engine**: Leverages `@fishan/myers-core-diff`, allowing you to *change the underlying diff algorithm* (e.g., `patienceDiff`, `preserveStructure`) via options.
+* **Configurable Granularity**: Choose between mixed (char-level optimized) or strict line-level patches via the `granularity` option.
+* **Optimal Compression**: Use `optimal: true` to automatically skip compression if it adds overhead to small patches.
 * **Configurable Validation**: Built-in validation (`validationLevel`) to ensure patch integrity during creation.
 * **Binary Mode**: Capable of diffing binary content (`mode: 'binary'`) by treating files as base64-encoded character streams.
 
@@ -293,18 +295,7 @@ const patch = CdiffService.createPatch(oldContent, newContent, {
 });
 
 console.log(patch);
-// Output:
-// [
-//   '~',
-//   '@0 Hello ',
-//   '@1 World',
-//   '@2 User',
-//   '$',
-//   '1 d 12 6 @0@1',
-//   '1 a 12 6 @0@2',
-//   '2 d 12 6 @0@1',
-//   '2 a 12 6 @0@2'
-// ]
+// Output: [ '~', '$', '2-3 d* L 5 World', '2-3 a* L 4 User' ]
 //
 // The patch is 100% self-contained and decompressed automatically
 // by applyPatch.
@@ -410,11 +401,96 @@ const patch = CdiffService.createPatch(oldCode, newCode, {
 });
 
 console.log(patch);
-// Output: [ '1 D+ 3', 'if (a) {', '  b();', '}', '2 A+ 3', 'if (a) {', '  b();', '}' ]
+// Output: [ '1 A c();', '4 D c();' ]
 ```
-
 </details>
 
+### Example 5: Granularity Control
+
+You can control whether cdiff generates character-level optimizations or strict line-level changes.
+
+<details>
+<summary><b>View Code</b></summary>
+
+```typescript
+
+import { CdiffService } from '@fishan/cdiff';
+
+const oldCode = `const config = {
+  port: 8080,
+  timeout: 5000,
+  debug: false
+};`;
+
+const newCode = `const config = {
+  port: 3000, // changed
+  timeout: 5000,
+  debug: true // changed
+};`;
+
+console.log('--- Granularity: Mixed (Default) ---');
+// 'mixed' (default): Generates optimized char-level diffs ('d', 'a') inside lines
+const mixedPatch = CdiffService.createPatch(oldCode, newCode, { granularity: 'mixed' });
+console.log (mixedPatch);
+/* Output: 
+--- Granularity: Mixed (Default) ---
+[
+  '2 d 8 5 8080,',
+  '2 a 8 16 3000, // changed',
+  '4 d 9 5 false',
+  '4 a 9 15 true // changed'
+]
+*/
+
+console.log('--- Granularity: Lines ---');
+// 'lines': Forces standard A/D line replacement
+const linesPatch = CdiffService.createPatch(oldCode, newCode, { granularity: 'lines' });
+console.log (linesPatch);
+/* Output: 
+--- Granularity: Lines ---
+[
+  '2 D   port: 8080,',
+  '2 A   port: 3000, // changed',
+  '4 D   debug: false',
+  '4 A   debug: true // changed'
+]
+*/
+```
+</details>
+
+###  Example 6: Optimal Compression
+
+Use optimal: true to ensure that enabling compression never results in a larger patch than the uncompressed version (useful for small changes where compression headers add overhead).
+
+<details>
+<summary><b>View Code</b></summary>
+
+```typescript
+
+import { CdiffService } from '@fishan/cdiff';
+
+const oldText = "This is a simple text.";
+const newText = "This is a simple test.";
+
+console.log('--- Normal Compress ---');
+// Might be larger due to headers (~, $) on such a tiny text
+const normal = CdiffService.createPatch(oldText, newText, { compress: true, optimal: false });
+console.log (normal);
+/* Output: 
+--- Normal Compress ---
+[ '~', '$', '2 d L 1 x', '2 a L 1 s' ]
+*/
+
+console.log('--- Optimal Compress ---');
+// Falls back to uncompressed because it's smaller
+const optimal = CdiffService.createPatch(oldText, newText, { compress: true, optimal: true });
+console.log (optimal);
+/* Output: 
+--- Optimal Compress ---
+[ '1 d 19 1 x', '1 a 19 1 s' ]
+*/
+```
+</details>
 ---
 
 ## Patch Format
@@ -518,7 +594,9 @@ Options for `CdiffService.createPatch`.
 | :--- | :--- | :--- | :--- |
 | `mode` | `'text'` \| `'binary'` | `'text'` | Treats content as lines (`text`) or a single block (`binary`). |
 | `debug` | `boolean` | `false` | Enables verbose console logging during patch creation. |
+| `granularity` |  `'mixed'` \| `'lines'` |  `'mixed'` | Controls the granularity of patch generation.
 | `compress` | `boolean` | `false` | If `true`, enables the built-in hybrid compression. |
+| `optimal` | `boolean` | `false` | If true (and compress: true), discards compression if the result is larger than uncompressed. |
 | `diffStrategyName` | `string` | `'commonSES'` | Name of the registered strategy from `@fishan/myers-core-diff` (e.g., `patienceDiff`). |
 | `includeEqualMode` | `'none'` \| `'inline'` \| `'separate'` \| `'context'` | `'none'` | Strategy for including `EQUAL` (context) blocks. |
 | `includeCharEquals` | `boolean` | `false` | If `true`, generates `e` (char-level equal) commands for validation. |
@@ -576,7 +654,7 @@ Options for `CdiffService.applyPatch` and `CdiffService.applyInvertedPatch`.
    ```
 
 <details>
-<summary><strong>Click to view Test Results (182 passing)</strong></summary>
+<summary><strong>Click to view Test Results (191 passing)</strong></summary>
 
 ```
   CdiffService.createPatch - mode: 'binary' (Unit Tests)
@@ -850,6 +928,17 @@ Patch application (COMPRESSED) matches old content (Backward): true
     ✅ should generate a correct patch for a simple chars swap
     ✅ should generate a correct patch for a block move
     ✅ should handle a mix of replacements and pure additions/deletions
+
+  [CdiffService] Granularity and Optimal Options
+    ✅ granularity: 'lines' should force line-level commands (ignore char optimizations)
+    ✅ granularity: 'mixed' (default) should choose optimal representation
+    ✅ granularity: 'chars' should throw not implemented error
+    ✅ granularity: invalid option should throw error
+    ✅ granularity: 'lines' works correctly with includeEqualMode='inline'
+    ✅ optimal: true should prevent compressed patch from being larger (Anti-bloat)
+    ✅ optimal: true should keep compressed version if it is indeed smaller
+    ✅ Scenario: 'lines' granularity with 'unsafe' deletionStrategy
+    ✅ Scenario: Validation works with granularity='lines'
 ```
 
 </details>

@@ -1,6 +1,6 @@
 {
   "name": "@fishan/cdiff",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "A robust library for creating, applying, and inverting compact, single-coordinate diff patches. Features advanced options including char-level operations, patch compression, and configurable safety levels ('unsafe' mode).",
   "main": "dist/src/cdiff.js",
   "type": "module",
@@ -23,9 +23,9 @@
     "clean": "rimraf dist",
     "build:ts": "tsc -p tsconfig.json",
     "build:profile": "tsc -p tsconfig.profiling.json",
-    "build:minify": "terser dist/src/cdiff.js -o dist/cdiff.min.js --compress --mangle && terser dist/src/cdiff_chars.js -o dist/cdiff_chars.min.js --compress --mangle",
+    "build:minify": "terser dist/src/cdiff.js -o dist/cdiff.min.js --compress --mangle && terser dist/src/cdiff_chars.js -o dist/cdiff_chars.min.js --compress --mangle && terser dist/src/cdiff_compress.js -o dist/cdiff_compress.min.js --compress --mangle",
     "build": "npm run clean && npm run build:ts && npm run build:minify",
-    "build:prod:cdiff": "terser dist/src/cdiff.js -o dist/cdiff.min.js --compress --mangle && terser dist/src/cdiff_chars.js -o dist/cdiff_chars.min.js --compress --mangle",
+    "build:prod:cdiff": "terser dist/src/cdiff.js -o dist/cdiff.min.js --compress --mangle && terser dist/src/cdiff_chars.js -o dist/cdiff_chars.min.js --compress --mangle && terser dist/src/cdiff_compress.js -o dist/cdiff_compress.min.js --compress --mangle",
     "build:prod": "npm run clean && npm run build:ts && npm run build:prod:cdiff",
     "test:dev": "node --loader ts-node/esm --no-warnings ./node_modules/mocha/bin/mocha.js --bail test/*.ts",
     "test:build": "npm run build:ts && mocha --bail --ignore \"test/*.ts\" \"dist/test/*.js\"",
@@ -42,7 +42,8 @@
   "files": [
     "dist/src",
     "dist/cdiff.min.js",
-    "dist/cdiff_chars.min.js"
+    "dist/cdiff_chars.min.js",
+    "dist/cdiff_compress.min.js"
   ],
   "keywords": [
     "diff",

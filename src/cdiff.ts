@@ -40,10 +40,22 @@ export type CdiffOptions = {
      * 'binary': Treats content as a single binary block. 
      */
     mode?: 'text' | 'binary';
+    /**
+     * Controls the granularity of the patch generation.
+     * - 'lines': Forces line-level blocks (A/D). Ignores char-level optimizations.
+     * - 'chars': Forces char-level commands (a/d) where possible.
+     * - 'mixed' (default): Automatically picks the smallest representation between lines and chars.
+     */
+    granularity?: 'lines' | 'chars' | 'mixed';
     /** If true, logs detailed internal processing steps to the console. */
     debug?: boolean;
     /** If true, the generated patch will be compressed to reduce size. */
     compress?: boolean;
+    /**
+     * If true and compress=true, compares the size of the compressed patch vs uncompressed.
+     * Returns the uncompressed version if the compressed one is larger.
+     */
+    optimal?: boolean;
     /**
      * Specifies the diff strategy to use. Defaults to 'commonSES'. 
      * Available from box: 'commonSES', 'preserveStructure', 'patienceDiff'.
@@ -671,6 +683,7 @@ export class CdiffService {
      * const patch = CdiffService.createPatch(oldContent, newContent);
      * // patch: ['2-3 a* 0 2 "  "'] (Add 2 spaces at char 0 for lines 2-3)
      */
+
     public static createPatch(
         oldContent: string | undefined,
         newContent: string | undefined,
@@ -680,6 +693,8 @@ export class CdiffService {
         const debug = options?.debug ?? false;
         const compress = options?.compress ?? false;
         const strategyName = options?.diffStrategyName ?? 'commonSES';
+        const granularity = options?.granularity ?? 'mixed';
+        const optimal = options?.optimal ?? false;
         const includeEqualMode = options?.includeEqualMode ?? 'none';
         const includeCharEquals = options?.includeCharEquals ?? false;
         const contextLines = (includeEqualMode === 'context') 
@@ -688,10 +703,18 @@ export class CdiffService {
         const finalIncludeCharEquals = (includeCharEquals ?? false) || (includeEqualMode === 'context');
         const deletionStrategy = options?.deletionStrategy ?? 'safe';
         let validationLevel = options?.validationLevel ?? 'none';
+        
+        if (granularity === 'chars') {
+            throw new Error('granularity: "chars" is not yet implemented. Use "lines" or "mixed".');
+        }
+        if (granularity !== 'lines' && granularity !== 'mixed') {
+            throw new Error(`Invalid granularity: "${granularity}". Must be "lines" or "mixed".`);
+        }
         if (__DEV__ && debug && validationLevel === 'none') {
             validationLevel = 'all-invert'; // 'debug' mode defaults to 'all-invert'
         }
-        if (__DEV__ && debug) console.log(`--- CdiffService.createPatch (mode: ${mode}, validation: ${validationLevel}) ---`);
+        if (__DEV__ && debug) console.log(`--- CdiffService.createPatch (mode: ${mode}, validation: ${validationLevel}), granularity: ${granularity}) ---`);
+
 
         const oldC = oldContent ?? '';
         const newC = newContent ?? '';
@@ -862,7 +885,7 @@ export class CdiffService {
             const removedLines = block.removed;
             const addedLines = block.added;
 
-            if (removedLines.length > 0 && addedLines.length > 0 && removedLines.length === addedLines.length) {
+            if (granularity !== 'lines' && removedLines.length > 0 && addedLines.length > 0 && removedLines.length === addedLines.length) {
                 const blockStartLine = oldLineNum + 1;
                 const lineCharPatches = new Map<number, string[]>();
                 let totalCharPatchLength = 0;
@@ -1119,14 +1142,31 @@ export class CdiffService {
             if (__DEV__ && debug) console.log(`[createPatch v1+] Compressing main patch part (${patchToCompress.length} lines)...`);
             try {
                 if (patchToCompress.length > 0 || (includeEqualMode === 'separate' && equalBlocksSeparate.length > 0)) {
-                    finalPatch = CdiffCompressService.compress(patchToCompress, debug);
+                    const compressedPatch = CdiffCompressService.compress(patchToCompress, debug);
+                    if (optimal) {
+                        const uncompressedText = patchToCompress.join('\n');
+                        const compressedText = compressedPatch.join('\n');                        
+                        if (__DEV__ && debug) {
+                            console.log(`[Optimal] Uncompressed: ${uncompressedText.length} chars, Compressed: ${compressedText.length} chars`);
+                        }                        
+                        if (compressedText.length >= uncompressedText.length) {
+                            if (__DEV__ && debug) console.log(`[Optimal] Returning uncompressed (compressed is larger/equal)`);
+                            finalPatch = patchToCompress;
+                        } else {
+                            finalPatch = compressedPatch;
+                        }
+                    } else {
+                        finalPatch = compressedPatch;
+                    }
+                } else {
+                    finalPatch = patchToCompress;
                 }
             } catch (e) {
                 console.error(`[createPatch v1+] Compression failed: ${e}. Returning uncompressed.`);
-                finalPatch = patchToCompress; // Fallback to uncompressed
+                finalPatch = patchToCompress;
             }
         } else {
-            finalPatch = patchToCompress; // Compression not requested
+            finalPatch = patchToCompress;
         }
 
         const needsCompressedValidation = (
