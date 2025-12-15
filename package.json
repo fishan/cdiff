@@ -1,6 +1,6 @@
 {
   "name": "@fishan/cdiff",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "A robust library for creating, applying, and inverting compact, single-coordinate diff patches. Features advanced options including char-level operations, patch compression, and configurable safety levels ('unsafe' mode).",
   "main": "dist/src/cdiff.js",
   "type": "module",

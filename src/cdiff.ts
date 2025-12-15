@@ -1182,7 +1182,11 @@ export class CdiffService {
             let isValid = false;
 
             try {
-                decompressedPatch = CdiffCompressService.decompress(finalPatch, debug).patch;
+                if (CdiffCompressService.isCompressed(finalPatch)) {
+                    decompressedPatch = CdiffCompressService.decompress(finalPatch, debug).patch;
+                } else {
+                    decompressedPatch = finalPatch;
+                }
                 
                 const checkInvert = (validationLevel === 'compressed-invert' || validationLevel === 'all-invert');
                 const allowInvert = checkInvert && (deletionStrategy === 'safe');
